@@ -1,6 +1,6 @@
 ## docker-mesos-coreos
 
-Reliably auto-deploy mesos on CoreOS with a Deis PaaS while gaining experience with mesos deployment.
+Reliably auto-deploy mesos on CoreOS with a Deis PaaS.
 
 That's the idea behind this project at the moment anyway.
 
