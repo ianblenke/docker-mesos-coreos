@@ -36,7 +36,7 @@ fleetctl list-machines -fields=ip -no-legend | while read ip ; do scp zookeeper.
 Step 2: Install mesos.cloud-init on all machines in the fleet.
 
 ```console
-fleetctl list-machines -fields=ip -no-legend | while read ip ; do scp zookeeper.cloud-init  $ip:/tmp; ssh -n $ip sudo coreos-cloudinit -from-file=/tmp/zookeeper.cloud-init ; done
+fleetctl list-machines -fields=ip -no-legend | while read ip ; do scp mesos.cloud-init  $ip:/tmp; ssh -n $ip sudo coreos-cloudinit -from-file=/tmp/mesos.cloud-init ; done
 ```
 
 Note: These will eventually be pulled into one unified cloud-init, this is merely convenience from having been borrowed from [github.com/ianblenke/coreos-vagrant-kitchen-sink](https://github.com/ianblenke/coreos-vagrant-kitchen-sink/blob/master/cloud-init/)
