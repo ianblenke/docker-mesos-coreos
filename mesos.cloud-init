@@ -1,0 +1,147 @@
+#cloud-config
+coreos:
+  units:
+    - name: mesos-create-fleet-units.service
+      command: start
+      content: |
+        [Unit]
+        After=docker.service
+        ConditionFileIsExecutable=/srv/mesos-create-fleet-units.sh
+        ConditionFileNotEmpty=/srv/mesos-master@.service
+        ConditionFileNotEmpty=/srv/mesos-slave@.service
+        ConditionFileNotEmpty=/srv/mesos-master-deis-publisher@.service
+        ConditionFileNotEmpty=/srv/mesos-marathon@.service
+        ConditionFileNotEmpty=/srv/mesos-marathon-deis-publisher@.service
+
+        [Service]
+        ExecStart=/srv/mesos-create-fleet-units.sh
+        RemainAfterExit=no
+write_files:
+  - path: /srv/mesos-create-fleet-units.sh
+    permissions: '0755'
+    owner: root
+    content: |
+      #!/bin/bash
+      source /etc/environment
+      set -ex
+
+      mkdir -p /srv
+
+      for servicename in mesos-master mesos-slave mesos-master-deis-publisher mesos-marathon mesos-marathon-deis-publisher ; do
+        cp /srv/$servicename@.service /srv/$servicename@$(hostname).service
+        ( echo -n MachineID=; cat /etc/machine-id ) >> /srv/$servicename@$(hostname).service
+        sed -i -e "s/%i/$(hostname)/g" /srv/$servicename@$(hostname).service
+        /usr/bin/fleetctl start /srv/$servicename.service
+      done
+  - path: /srv/mesos-master.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Run a mesos-master on every machine in the fleet
+      After=docker.service
+      After=zookeeper.service
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      ExecStartPre=-/usr/bin/docker kill mesos_master
+      ExecStartPre=-/usr/bin/docker rm mesos_master
+      ExecStartPre=-/usr/bin/mkdir -p /data/mesos-master/work /data/mesos-master/log
+      #ExecStartPre=/usr/bin/docker pull ianblenke/mesos-master
+      ExecStart=/bin/bash -c 'exec /usr/bin/docker run --name mesos_master \
+                                    -p 5050:5050 \
+                                    -v /data/mesos-master:/data \
+                                    -e MESOS_LOG_DIR=/data/log \
+                                    -e MESOS_LOGGING_LEVEL=info \
+                                    -e MESOS_PORT=5050 \
+                                    -e MESOS_CLUSTER="CoreOS" \
+                                    -e MESOS_WORK_DIR=/data/work \
+                                    -e MESOS_HOSTNAME=$(hostname) \
+                                    -e MESOS_ZK=zk://$(fleetctl list-machines -full -no-legend -fields=ip | sed -e 's/$/:2181/' | paste -s -d, )/mesos \
+                                    -e MESOS_REGISTRY=replicated_log \
+                                    -e MESOS_QUORUM=$( (( majority = $(fleetctl list-machines -no-legend | wc -l) / 2 + 1 )) ; echo $majority) \
+                                    ianblenke/mesos-master mesos-master
+      ExecStop=/usr/bin/docker stop mesos_master
+  - path: /srv/mesos-slave@.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Run a mesos-slave on every machine in the fleet
+      After=docker.service
+      After=zookeeper.service
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      ExecStartPre=-/usr/bin/docker kill mesos_slave
+      ExecStartPre=-/usr/bin/docker rm mesos_slave
+      #ExecStartPre=/usr/bin/docker pull ianblenke/mesos-slave
+      ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
+                                    --name mesos_slave \
+                                    --privileged \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -p 5051:5051 \
+                                    -e MESOS_PORT=5051 \
+                                    -e MESOS_HOSTNAME=$(hostname) \
+                                    -e MESOS_MASTER=zk://$(fleetctl list-machines -full -no-legend -fields=ip | sed -e 's/$/:5050/' | paste -s -d, )/mesos \
+                                    -e MESOS_CONTAINTERIZERS=docker,mesos \
+                                ianblenke/mesos-slave \
+                                mesos-slave
+      ExecStop=/usr/bin/docker stop mesos_slave
+
+      [X-Fleet]
+  - path: /srv/mesos-master-deis-publisher@.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Publish mesos-master@%i to etcd for deis-router
+      After=docker.service
+      After=mesos-master@%i.service
+      BindsTo=mesos-master@%i.service
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      ExecStart=/bin/sh -c "while true; do etcdctl set /deis/services/mesos/mesos-master@%i ${COREOS_PRIVATE_IPV4}:5050 --ttl 60; sleep 45; done"
+      ExecStop=/usr/bin/etcdctl rm /deis/services/mesos/mesos-master@%i
+
+      [X-Fleet]
+  - path: /srv/mesos-marathon@.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Run a mesos-marathon on every machine in the fleet
+      After=docker.service
+      After=zookeeper.service
+      After=mesos-master.service
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      ExecStartPre=-/usr/bin/docker kill mesos_marathon
+      ExecStartPre=-/usr/bin/docker rm mesos_marathon
+      #ExecStartPre=/usr/bin/docker pull ianblenke/mesos-marathon
+      ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
+                                    --name mesos_marathon \
+                                    -p 15050:15050 \
+                                ianblenke/mesos-marathon \
+                                /opt/marathon/bin/start --master zk://$(fleetctl list-machines -full -no-legend -fields=ip | sed -e 's/$/:2181/' | paste -s -d, )/mesos -e MESOS_ZK=zk://$(fleetctl list-machines -full -no-legend -fields=ip | sed -e 's/$/:2181/' | paste -s -d, )/marathon
+      ExecStop=/usr/bin/docker stop mesos_marathon
+
+      [X-Fleet]
+  - path: /srv/mesos-marathon-deis-publisher@.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Publish mesos-marathon@%i to etcd for deis-router
+      After=docker.service
+      After=mesos-marathon@%i.service
+      BindsTo=mesos-marathon@%i.service
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      ExecStart=/bin/sh -c "while true; do etcdctl set /deis/services/marathon/mesos-marathon@%i ${COREOS_PRIVATE_IPV4}:15050 --ttl 60; sleep 45; done"
+      ExecStop=/usr/bin/etcdctl rm /deis/services/mesos/mesos-marathon@%i
+
+      [X-Fleet]
