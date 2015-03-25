@@ -6,47 +6,33 @@ coreos:
       content: |
         [Unit]
         After=docker.service
-        ConditionFileIsExecutable=/tmp/zookeeper-create-fleet-units.sh
-        ConditionFileNotEmpty=/tmp/zookeeper@.service
+        ConditionFileIsExecutable=/srv/zookeeper-create-fleet-units.sh
+        ConditionFileIsExecutable=/srv/zookeeper-generate-environment.sh
+        ConditionFileNotEmpty=/srv/zookeeper@.service
+        ConditionFileNotEmpty=/etc/zookeeper-release
 
         [Service]
-        ExecStart=/tmp/zookeeper-create-fleet-units.sh
+        ExecStart=/srv/zookeeper-create-fleet-units.sh
         RemainAfterExit=no
         Type=oneshot
 write_files:
   - path: /etc/zookeeper-release
     content: |
       ZOOKEEPER_RELEASE=3.4.6-1
-  - path: /tmp/zookeeper-create-fleet-units.sh
+  - path: /srv/zookeeper-create-fleet-units.sh
     permissions: '0755'
     owner: root
     content: |
       #!/bin/bash
       set -ex
-      cp -f /tmp/zookeeper@.service /tmp/zookeeper@$(hostname).service
-      ( echo -n MachineID=; cat /etc/machine-id ) >> /tmp/zookeeper@$(hostname).service
-      cp -f /tmp/zookeeper-download@.service /tmp/zookeeper-download@$(hostname).service
-      ( echo -n MachineID=; cat /etc/machine-id ) >> /tmp/zookeeper-download@$(hostname).service
-      /usr/bin/fleetctl start /tmp/zookeeper-download@$(hostname).service
-  - path: /tmp/zookeeper-download@.service
-    permissions: '0644'
-    owner: root
-    content: |
-      [Unit]
-      Description=Zookeeper service
-      After=docker.service
-      ConditionFileNotEmpty=/etc/zookeeper-release
-      ConditionFileIsExecutable=/tmp/zookeeper-generate-environment.sh
-
-      [Service]
-      EnvironmentFile=/etc/zookeeper-release
-      ExecStart=/bin/bash -c "exec /usr/bin/docker pull quay.io/signalfuse/zookeeper:${ZOOKEEPER_RELEASE}"
-      ExecStart=/tmp/zookeeper-generate-environment.sh
-      ExecStart=/bin/bash -c "exec /usr/bin/fleetctl start /tmp/zookeeper@$(hostname).service"
-      Type=oneshot
-
-      [X-Fleet]
-  - path: /tmp/zookeeper-generate-environment.sh
+      mkdir -p /srv
+      source /etc/zookeeper-release
+      /usr/bin/docker pull quay.io/signalfuse/zookeeper:${ZOOKEEPER_RELEASE}
+      /srv/zookeeper-generate-environment.sh
+      cp -f /srv/zookeeper@.service /srv/zookeeper@$(hostname).service
+      ( echo -n MachineID=; cat /etc/machine-id ) >> /srv/zookeeper@$(hostname).service
+      /usr/bin/fleetctl start /srv/zookeeper@$(hostname).service
+  - path: /srv/zookeeper-generate-environment.sh
     permissions: '0755'
     owner: root
     content: |
@@ -62,6 +48,7 @@ write_files:
         echo ZOOKEEPER_DATA_DIR=/data/zookeeper
         echo SERVICE_NAME=zookeeper
         echo CONTAINER_NAME=$machineid
+        echo JVM_FLAGS=-Xmx1g
         echo ZOOKEEPER_NODE_ID=$(ip2dec $(fleetctl list-machines -full -no-legend -fields=machine,ip | grep $(cat /etc/machine-id) | awk '{print $2}'))
         echo ZOOKEEPER_SERVER_IDS=$(fleetctl list-machines -full -no-legend -fields=machine,ip | while read line; do pair=( $line ) ; echo $(echo ${pair[0]} | tr '[:lower:]' '[:upper:]'):$(ip2dec ${pair[1]});  done | paste -s -d,)
         echo ZOOKEEPER_INSTANCES=$(fleetctl list-machines -full -no-legend -fields=machine | tr '[:lower:]' '[:upper:]' | paste -s -d,)
@@ -75,7 +62,7 @@ write_files:
           echo ZOOKEEPER_${container}_JMX=11099
         done
       ) > /etc/zookeeper-environment
-  - path: /tmp/zookeeper@.service
+  - path: /srv/zookeeper@.service
     permissions: '0644'
     owner: root
     content: |
@@ -90,10 +77,11 @@ write_files:
       EnvironmentFile=/etc/zookeeper-release
       EnvironmentFile=/etc/zookeeper-environment
 
-      ExecStartPre=/usr/bin/mkdir -p /data/zookeeper
-
+      ExecStartPre=-/usr/bin/mkdir -p /data/zookeeper
+      ExecStartPre=-/bin/bash -c '/usr/bin/docker inspect zookeeper 2>&1 > /dev/null && ( /usr/bin/docker stop zookeeper; /usr/bin/docker rm zookeeper)'
       ExecStart=/bin/bash -xc "exec /usr/bin/docker run --name zookeeper \
-                                                        --hostname zookeeper-$(hostname) \
+                                                        --rm \
+                                                        --net=host \
                                                         --publish 2181:2181 \
                                                         --publish 2888:2888 \
                                                         --publish 3888:3888 \
@@ -101,9 +89,7 @@ write_files:
                                                         --volume /data/zookeeper:/data/zookeeper \
                                                         $( cat /etc/zookeeper-environment | sed -e 's/^/-e /' ) \
                                                         quay.io/signalfuse/zookeeper:${ZOOKEEPER_RELEASE}"
-
       ExecStop=/usr/bin/docker stop zookeeper
-      ExecStop=/usr/bin/docker rm zookeeper
 
       Restart=on-failure
       TimeoutSec=300
