@@ -47,12 +47,17 @@ write_files:
       ExecStartPre=-/usr/bin/docker kill mesos_master
       ExecStartPre=-/usr/bin/docker rm mesos_master
       ExecStartPre=-/usr/bin/mkdir -p /data/mesos-master/work /data/mesos-master/log
+      ExecStartPre=-/bin/bash -c '/usr/bin/docker inspect mesos_master 2>&1 > /dev/null && ( /usr/bin/docker stop mesos_master; /usr/bin/docker rm mesos_master)'
       ExecStartPre=/usr/bin/docker pull ianblenke/mesos-master
-      ExecStart=/bin/bash -c 'exec /usr/bin/docker run --name mesos_master \
-                                    -p 5050:5050 \
+      ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
+                                    --name mesos_master \
+                                    --rm \
+                                    --net=host \
                                     -v /data/mesos-master:/data \
+                                    -p 5050:5050 \
+                                    -e MESOS_IP=${COREOS_PRIVATE_IPV4} \
                                     -e MESOS_LOG_DIR=/data/log \
-                                    -e MESOS_LOGGING_LEVEL=INFO \
+                                    -e MESOS_LOGGING_LEVEL=WARNING \
                                     -e MESOS_PORT=5050 \
                                     -e MESOS_CLUSTER="CoreOS" \
                                     -e MESOS_WORK_DIR=/data/work \
@@ -75,14 +80,19 @@ write_files:
       EnvironmentFile=/etc/environment
       ExecStartPre=-/usr/bin/docker kill mesos_slave
       ExecStartPre=-/usr/bin/docker rm mesos_slave
+      ExecStartPre=-/bin/bash -c '/usr/bin/docker inspect mesos_slave 2>&1 > /dev/null && ( /usr/bin/docker stop mesos_slave; /usr/bin/docker rm mesos_slave)'
       ExecStartPre=/usr/bin/docker pull ianblenke/mesos-slave
       ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
                                     --name mesos_slave \
+                                    --rm \
                                     --privileged \
+                                    --net=host \
                                     -v /var/run/docker.sock:/var/run/docker.sock \
                                     -p 5051:5051 \
+                                    -e MESOS_IP=${COREOS_PRIVATE_IPV4} \
                                     -e MESOS_PORT=5051 \
                                     -e MESOS_HOSTNAME=$(hostname) \
+                                    -e MESOS_LOGGING_LEVEL=WARNING \
                                     -e MESOS_MASTER=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos \
                                     -e MESOS_CONTAINTERIZERS=docker,mesos \
                                 ianblenke/mesos-slave \
@@ -120,6 +130,7 @@ write_files:
       EnvironmentFile=/etc/environment
       ExecStartPre=-/usr/bin/docker kill mesos_marathon
       ExecStartPre=-/usr/bin/docker rm mesos_marathon
+      ExecStartPre=-/bin/bash -c '/usr/bin/docker inspect mesos_marathon 2>&1 > /dev/null && ( /usr/bin/docker stop mesos_marathon; /usr/bin/docker rm mesos_marathon)'
       ExecStartPre=/usr/bin/docker pull ianblenke/mesos-marathon
       ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
                                     --name mesos_marathon \
