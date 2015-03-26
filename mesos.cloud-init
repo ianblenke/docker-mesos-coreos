@@ -140,7 +140,7 @@ write_files:
                                     -e MARATHON_HOSTNAME=$(hostname) \
                                     -e MARATHON_MASTER=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos \
                                     -e MARATHON_ZK=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/marathon \
-                                    -e MARATHON_WEB_UI=http://marathon.$(etcdctl get /deis/platform/domain) \
+                                    -e MARATHON_WEBUI_URL=http://marathon.$(etcdctl get /deis/platform/domain) \
                                     -e MARATHON_HTTP_PORT=15050 \
                                     ianblenke/mesos-marathon \
                                     /opt/marathon/bin/start --ha'
