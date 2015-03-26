@@ -134,9 +134,9 @@ write_files:
       ExecStartPre=/usr/bin/docker pull ianblenke/mesos-marathon
       ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
                                     --name mesos_marathon \
-                                    -p 15050:15050 \
+                                    -p 15050:8080 \
                                 ianblenke/mesos-marathon \
-                                /opt/marathon/bin/start --master zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos -e MESOS_ZK=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/marathon'
+                                /opt/marathon/bin/start --master zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos --zk zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/marathon'
       ExecStop=/usr/bin/docker stop mesos_marathon
 
       [X-Fleet]
