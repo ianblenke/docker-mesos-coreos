@@ -57,7 +57,7 @@ write_files:
                                     -p 5050:5050 \
                                     -e MESOS_IP=${COREOS_PRIVATE_IPV4} \
                                     -e MESOS_LOG_DIR=/data/log \
-                                    -e MESOS_LOGGING_LEVEL=WARNING \
+                                    -e MESOS_LOGGING_LEVEL=INFO \
                                     -e MESOS_PORT=5050 \
                                     -e MESOS_CLUSTER="CoreOS" \
                                     -e MESOS_WORK_DIR=/data/work \
@@ -67,6 +67,8 @@ write_files:
                                     -e MESOS_QUORUM=$( (( majority = $(fleetctl list-machines -no-legend | wc -l) / 2 + 1 )) ; echo $majority) \
                                     ianblenke/mesos-master mesos-master'
       ExecStop=/usr/bin/docker stop mesos_master
+
+      [X-Fleet]
   - path: /srv/mesos-slave@.service
     permissions: 0644
     owner: root
@@ -134,9 +136,13 @@ write_files:
       ExecStartPre=/usr/bin/docker pull ianblenke/mesos-marathon
       ExecStart=/bin/bash -c 'exec /usr/bin/docker run \
                                     --name mesos_marathon \
-                                    -p 15050:8080 \
-                                ianblenke/mesos-marathon \
-                                /opt/marathon/bin/start --master zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos --zk zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/marathon'
+                                    -p 15050:15050 \
+                                    -e MARATHON_HOSTNAME=$(hostname) \
+                                    -e MARATHON_MASTER=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/mesos \
+                                    -e MARATHON_ZK=zk://$(fleetctl list-machines -full -no-legend -fields=ip | xargs -l1 -i% echo %:2181 | paste -s -d, )/marathon \
+                                    -e MARATHON_HTTP_PORT=15050 \
+                                    ianblenke/mesos-marathon \
+                                    /opt/marathon/bin/start --ha'
       ExecStop=/usr/bin/docker stop mesos_marathon
 
       [X-Fleet]
