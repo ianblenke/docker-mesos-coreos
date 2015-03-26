@@ -27,12 +27,15 @@ write_files:
 
       mkdir -p /srv
 
+      services=()
       for servicename in mesos-master mesos-slave mesos-master-deis-publisher mesos-marathon mesos-marathon-deis-publisher ; do
         cp /srv/$servicename@.service /srv/$servicename@$(hostname).service
         ( echo -n MachineID=; cat /etc/machine-id ) >> /srv/$servicename@$(hostname).service
         sed -i -e "s/%i/$(hostname)/g" /srv/$servicename@$(hostname).service
-        /usr/bin/fleetctl start /srv/$servicename@$(hostname).service
+        services+=("$servicename@.service")
       done
+      cd /srv
+      /usr/bin/fleetctl start ${services[@]}
   - path: /srv/mesos-master@.service
     permissions: 0644
     owner: root
@@ -41,6 +44,8 @@ write_files:
       Description=Run mesos-master@%i
       After=docker.service
       After=zookeeper@%i.service
+      #Wants=mesos-master-deis-publisher@%i.service
+      #Before=mesos-master-deis-publisher@%i.service
 
       [Service]
       EnvironmentFile=/etc/environment
@@ -105,12 +110,11 @@ write_files:
       [Unit]
       Description=Publish leader mesos-master@%i to etcd for deis-router
       After=docker.service
-      After=mesos-master@%i.service
       BindsTo=mesos-master@%i.service
 
       [Service]
       EnvironmentFile=/etc/environment
-      ExecStart=/bin/sh -c "while true; do if [ "$(docker run --rm ianblenke/mesos-cli  | cut -d: -f1)" = "${COREOS_PRIVATE_IPV4}" ]; then etcdctl set /deis/services/mesos/mesos-master@%i ${COREOS_PRIVATE_IPV4}:5050 --ttl 60; fi; sleep 45; done"
+      ExecStart=/bin/sh -c "while true; do if [ \"$(docker run --rm ianblenke/mesos-cli  | cut -d: -f1)\" = \"${COREOS_PRIVATE_IPV4}\" ]; then etcdctl set /deis/services/mesos/mesos-master@%i ${COREOS_PRIVATE_IPV4}:5050 --ttl 60; fi; sleep 45; done"
       ExecStop=/usr/bin/etcdctl rm /deis/services/mesos/mesos-master@%i
 
       [X-Fleet]
@@ -123,6 +127,8 @@ write_files:
       After=docker.service
       After=zookeeper@%i.service
       After=mesos-master@%i.service
+      #Wants=mesos-marathon-deis-publisher@%i.service
+      #Before=mesos-marathon-deis-publisher@%i.service
 
       [Service]
       EnvironmentFile=/etc/environment
