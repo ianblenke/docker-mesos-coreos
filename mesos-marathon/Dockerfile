@@ -10,8 +10,10 @@ RUN service zookeeper stop
 RUN apt-get -y remove --purge zookeeper
 RUN echo manual > /etc/init/mesos-master.override
 
-ADD http://downloads.mesosphere.com/marathon/v0.7.5/marathon-0.7.5.tgz /tmp/marathon-0.7.5.tgz
-RUN cd /opt/ && tar xvf /tmp/marathon-0.7.5.tgz && mv marathon-0.7.5 marathon
+ENV VERSION 0.8.1
+
+ADD http://downloads.mesosphere.com/marathon/v${VERSION}/marathon-${VERSION}.tgz /tmp/marathon-${VERSION}.tgz
+RUN cd /opt/ && tar xvf /tmp/marathon-${VERSION}.tgz && mv marathon-${VERSION} marathon
 
 EXPOSE 15050
 
