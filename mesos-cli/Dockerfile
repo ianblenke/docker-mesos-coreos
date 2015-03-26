@@ -1,6 +1,7 @@
 FROM python
 MAINTAINER Ian Blenke <ian@blenke.com>
 
+RUN pip install importlib
 RUN git clone https://github.com/mesosphere/mesos-cli /app
 RUN pip install /app
 
