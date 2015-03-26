@@ -103,14 +103,14 @@ write_files:
     owner: root
     content: |
       [Unit]
-      Description=Publish mesos-master@%i to etcd for deis-router
+      Description=Publish leader mesos-master@%i to etcd for deis-router
       After=docker.service
       After=mesos-master@%i.service
       BindsTo=mesos-master@%i.service
 
       [Service]
       EnvironmentFile=/etc/environment
-      ExecStart=/bin/sh -c "while true; do etcdctl set /deis/services/mesos/mesos-master@%i ${COREOS_PRIVATE_IPV4}:5050 --ttl 60; sleep 45; done"
+      ExecStart=/bin/sh -c "while true; do if [ "$(docker run --rm ianblenke/mesos-cli  | cut -d: -f1)" = "${COREOS_PRIVATE_IPV4}" ]; then etcdctl set /deis/services/mesos/mesos-master@%i ${COREOS_PRIVATE_IPV4}:5050 --ttl 60; fi; sleep 45; done"
       ExecStop=/usr/bin/etcdctl rm /deis/services/mesos/mesos-master@%i
 
       [X-Fleet]
