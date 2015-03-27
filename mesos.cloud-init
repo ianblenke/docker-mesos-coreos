@@ -32,7 +32,7 @@ write_files:
         cp /srv/$servicename@.service /srv/$servicename@$(hostname).service
         ( echo -n MachineID=; cat /etc/machine-id ) >> /srv/$servicename@$(hostname).service
         sed -i -e "s/%i/$(hostname)/g" /srv/$servicename@$(hostname).service
-        services+=("$servicename@.service")
+        services+=("$servicename@$(hostname).service")
       done
       cd /srv
       /usr/bin/fleetctl start ${services[@]}
